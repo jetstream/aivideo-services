@@ -63,7 +63,7 @@ namespace Microsoft.Azure.IoTSolutions.UIConfig.WebService.Runtime
                 DeviceSimulationApiUrl = configData.GetString(DEVICE_SIMULATION_URL_KEY),
                 TelemetryApiUrl = configData.GetString(TELEMETRY_URL_KEY),
                 SolutionType = configData.GetString(SOLUTION_TYPE_KEY),
-                SeedTemplate = configData.GetString(SEED_TEMPLATE_KEY),
+                SeedTemplate = configData.GetString(SEED_TEMPLATE_KEY, "default"),
                 AzureMapsKey = configData.GetString(AZURE_MAPS_KEY),
                 UserManagementApiUrl = configData.GetString(USER_MANAGEMENT_URL_KEY)
             };
