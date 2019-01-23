@@ -22,9 +22,6 @@ PCS_CACHE="/tmp/azure/iotpcs/.cache"
 compile() {
     check_dependency_dotnet
 
-    cd $APP_HOME
-    ./scripts/env-vars-check
-
     header "Downloading dependencies..."
     dotnet restore
 
@@ -37,10 +34,13 @@ run_tests() {
 
     cd $APP_HOME
     header "Running tests..."
-    PROJECTS=$(dotnet sln list | grep 'csproj$' | grep '\.Test')
+    PROJECTS=$(dotnet sln telemetry.sln list | grep '\.Test')
+
     for PROJ in $PROJECTS; do
-        echo "-- $PROJ"
-        dotnet test --configuration $CONFIGURATION $PROJ
+	PROJ=${PROJ//\\/\/}
+	PROJ=$(echo $PROJ | sed 's/[^a-zA-Z\.\/]//g')
+	echo "-- $PROJ"
+	dotnet test --configuration $CONFIGURATION $PROJ
     done
 }
 
@@ -78,6 +78,11 @@ build_in_sandbox() {
             -e PCS_AAD_APPSECRET \
             -e PCS_TELEMETRY_STORAGE_TYPE \
             -e PCS_TSI_FQDN \
+            -e PCS_AZUREBLOB_CONNSTRING \
+            -e PCS_ACTION_EVENTHUB_CONNSTRING \
+            -e PCS_ACTION_EVENTHUB_NAME \
+            -e PCS_LOGICAPP_ENDPOINT_URL \
+            -e PCS_SOLUTION_WEBSITE_URL \
             -v "$PCS_CACHE/sandbox/.config:/root/.config" \
             -v "$PCS_CACHE/sandbox/.dotnet:/root/.dotnet" \
             -v "$PCS_CACHE/sandbox/.nuget:/root/.nuget" \

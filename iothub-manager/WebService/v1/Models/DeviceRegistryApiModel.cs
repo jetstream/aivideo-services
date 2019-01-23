@@ -48,6 +48,9 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.WebService.v1.Models
         [JsonProperty(PropertyName = "Tags", NullValueHandling = NullValueHandling.Ignore)]
         public Dictionary<string, JToken> Tags { get; set; }
 
+        [JsonProperty(PropertyName = "IsEdgeDevice")]
+        public bool IsEdgeDevice { get; set; }
+
         [JsonProperty(PropertyName = "IsSimulated", NullValueHandling = NullValueHandling.Ignore)]
         public bool IsSimulated { get; set; }
 
@@ -68,6 +71,7 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.WebService.v1.Models
             this.LastActivity = device.LastActivity;
             this.Connected = device.Connected;
             this.Enabled = device.Enabled;
+            this.IsEdgeDevice = device.IsEdgeDevice;
             this.LastStatusUpdated = device.LastStatusUpdated;
             this.IoTHubHostName = device.IoTHubHostName;
             this.Authentication = new AuthenticationMechanismApiModel(device.Authentication);
@@ -117,7 +121,7 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.WebService.v1.Models
 
         public DeviceServiceModel ToServiceModel()
         {
-            var twinModel = new DeviceTwinServiceModel
+            var twinModel = new TwinServiceModel
             (
                 etag: this.TwinEtag,
                 deviceId: this.Id,
@@ -135,6 +139,7 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.WebService.v1.Models
                 lastActivity: this.LastActivity,
                 connected: this.Connected,
                 enabled: this.Enabled,
+                isEdgeDevice: this.IsEdgeDevice,
                 lastStatusUpdated: this.LastStatusUpdated,
                 twin: twinModel,
                 ioTHubHostName: this.IoTHubHostName,

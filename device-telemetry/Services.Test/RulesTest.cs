@@ -10,6 +10,7 @@ using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Exceptions;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.External;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Http;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Models;
+using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Models.Actions;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Runtime;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Storage.StorageAdapter;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.StorageAdapter;
@@ -60,7 +61,7 @@ namespace Services.Test
             var list = await this.rulesMock.Object.GetListAsync(null, 0, LIMIT, null, false);
 
             // Assert
-            Assert.Equal(0, list.Count);
+            Assert.Empty(list);
         }
 
         [Fact, Trait(Constants.TYPE, Constants.UNIT_TEST)]
@@ -74,6 +75,11 @@ namespace Services.Test
 
             // Assert
             Assert.NotEmpty(list);
+
+            foreach (Rule rule in list)
+            {
+                Assert.NotNull(rule.Actions);
+            }
         }
 
         /**
@@ -398,6 +404,74 @@ namespace Services.Test
             this.httpClientMock.Verify(x => x.PostAsync(It.IsAny<HttpRequest>()), Times.Exactly(4));
         }
 
+        [Fact, Trait(Constants.TYPE, Constants.UNIT_TEST)]
+        public async Task ThrowsOnInvalidInput()
+        {
+            // Arrange
+            var xssString = "<body onload=alert('test1')>";
+            var xssList = new List<string>
+            {
+                "<body onload=alert('test1')>",
+                "<IMG SRC=j&#X41vascript:alert('test2')>"
+            };
+
+            var rule = new Rule()
+            {
+                ETag = xssString,
+                Id = xssString,
+                Name = xssString,
+                DateCreated = xssString,
+                DateModified = xssString,
+                Enabled = true,
+                Description = xssString,
+                GroupId = xssString,
+                Severity = SeverityType.Critical,
+                Conditions = new List<Condition>
+                {
+                    new Condition()
+                    {
+                        Field = "sample_conddition",
+                        Operator = OperatorType.Equals,
+                        Value = "1"
+                    }
+                },
+                Actions = new List<IAction>
+                {
+                    new EmailAction(
+                        new Dictionary<string, object>
+                        {
+                            { "recipients", new Newtonsoft.Json.Linq.JArray(){ "sampleEmail@gmail.com", "sampleEmail2@gmail.com" } },
+                            { "subject", "Test Email" },
+                            { "notes", "Test Email Notes." }
+                        })
+                }
+            };
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidInputException>(async () => await this.rules.DeleteAsync(xssString));
+            await Assert.ThrowsAsync<InvalidInputException>(async () => await this.rules.DeleteAsync(xssString));
+            await Assert.ThrowsAsync<InvalidInputException>(async () => await this.rules.GetAsync(xssString));
+            await Assert.ThrowsAsync<InvalidInputException>(async () => await this.rules.GetListAsync(xssString, 0, 1, xssString, false));
+            await Assert.ThrowsAsync<InvalidInputException>(async () => await this.rules.GetAlarmCountForListAsync(null, null, xssString, 0, LIMIT, xssList.ToArray()));
+            await Assert.ThrowsAsync<InvalidInputException>(async () => await this.rules.CreateAsync(rule));
+            await Assert.ThrowsAsync<InvalidInputException>(async () => await this.rules.UpsertIfNotDeletedAsync(rule));
+        }
+
+        [Fact, Trait(Constants.TYPE, Constants.UNIT_TEST)]
+        public void InputValidationPassesWithValidRule()
+        {
+            // Arrange
+            this.ThereAreSomeRulesInStorage();
+
+            List<Rule> rulesList = this.GetSampleRulesList();
+
+            // Act & Assert
+            foreach (var rule in rulesList)
+            {
+                rule.Validate();
+            }
+        }
+
         private void ThereAreNoRulessInStorage()
         {
             this.rulesMock.Setup(x => x.GetListAsync(null, 0, LIMIT, null, false))
@@ -405,6 +479,14 @@ namespace Services.Test
         }
 
         private void ThereAreSomeRulesInStorage()
+        {
+            var sampleRules = this.GetSampleRulesList();
+
+            this.rulesMock.Setup(x => x.GetListAsync(null, 0, LIMIT, null, false))
+                .ReturnsAsync(sampleRules);
+        }
+
+        private List<Rule> GetSampleRulesList()
         {
             var sampleConditions = new List<Condition>
             {
@@ -416,16 +498,28 @@ namespace Services.Test
                 }
             };
 
+            var sampleActions = new List<IAction>
+            {
+                new EmailAction(
+                    new Dictionary<string, object>
+                    {
+                        { "recipients", new Newtonsoft.Json.Linq.JArray(){ "sampleEmail@gmail.com", "sampleEmail2@gmail.com" } },
+                        { "subject", "Test Email" },
+                        { "notes", "Test Email Notes." }
+                    })
+            };
+
             var sampleRules = new List<Rule>
             {
                 new Rule()
                 {
                     Name = "Sample 1",
                     Enabled = true,
-                    Description = "Sample description 1",
+                    Description = "Sample description 1 -- Pressure >= 298",
                     GroupId = "Prototyping devices",
                     Severity = SeverityType.Critical,
-                    Conditions = sampleConditions
+                    Conditions = sampleConditions,
+                    Actions = sampleActions
                 },
                 new Rule()
                 {
@@ -434,12 +528,24 @@ namespace Services.Test
                     Description = "Sample description 2",
                     GroupId =  "Prototyping devices",
                     Severity =  SeverityType.Warning,
-                    Conditions =  sampleConditions
+                    Conditions = sampleConditions,
+                    Actions = sampleActions
+                },
+                new Rule()
+                {
+                    ETag = "*",
+                    Name = "Sample 3",
+                    Enabled = true,
+                    Calculation = CalculationType.Instant,
+                    Description = "Sample description 2.",
+                    GroupId =  "Chillers",
+                    Severity =  SeverityType.Warning,
+                    Conditions = sampleConditions,
+                    Actions = sampleActions
                 }
             };
 
-            this.rulesMock.Setup(x => x.GetListAsync(null, 0, LIMIT, null, false))
-                .ReturnsAsync(sampleRules);
+            return sampleRules;
         }
 
         /**

@@ -2,6 +2,8 @@
 
 using System;
 using System.Collections.Generic;
+using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Helpers;
+using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Models.Actions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
@@ -10,6 +12,7 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Models
     public class Rule : IComparable<Rule>
     {
         private const string DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:sszzz";
+
         // Comes from the StorageAdapter document and not the serialized rule
         [JsonIgnore]
         public string ETag { get; set; } = string.Empty;
@@ -29,6 +32,7 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Models
         // Possible values -[60000, 300000, 600000] in milliseconds
         public long TimePeriod { get; set; } = 0;
         public IList<Condition> Conditions { get; set; } = new List<Condition>();
+        public IList<IAction> Actions { get; set; } = new List<IAction>();
         public bool Deleted { get; set; } = false;
         public Rule() { }
 
@@ -38,6 +42,11 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Models
 
             return DateTimeOffset.Parse(other.DateCreated)
                 .CompareTo(DateTimeOffset.Parse(this.DateCreated));
+        }
+
+        public void Validate()
+        {
+            InputValidator.Validate(this.Id);
         }
     }
 

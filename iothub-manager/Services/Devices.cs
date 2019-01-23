@@ -13,10 +13,10 @@ using Microsoft.Azure.IoTSolutions.IotHubManager.Services.Models;
 using Microsoft.Azure.IoTSolutions.IotHubManager.Services.Runtime;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using AuthenticationType = Microsoft.Azure.IoTSolutions.IotHubManager.Services.Models.AuthenticationType;
 
 namespace Microsoft.Azure.IoTSolutions.IotHubManager.Services
 {
-
     public delegate Task<DevicePropertyServiceModel> DevicePropertyDelegate(DevicePropertyServiceModel model);
     public interface IDevices
     {
@@ -26,12 +26,17 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.Services
         Task<DeviceServiceModel> CreateAsync(DeviceServiceModel toServiceModel);
         Task<DeviceServiceModel> CreateOrUpdateAsync(DeviceServiceModel toServiceModel, DevicePropertyDelegate devicePropertyDelegate);
         Task DeleteAsync(string id);
+        Task<TwinServiceModel> GetModuleTwinAsync(string deviceId, string moduleId);
+        Task<TwinServiceListModel> GetModuleTwinsByQueryAsync(string query, string continuationToken);
+        Task<StatusResultServiceModel> PingRegistryAsync();
     }
 
     public class Devices : IDevices
     {
         private const int MAX_GET_LIST = 1000;
         private const string QUERY_PREFIX = "SELECT * FROM devices";
+        private const string MODULE_QUERY_PREFIX = "SELECT * FROM devices.modules";
+        private const string DEVICES_CONNECTED_QUERY = "connectionState = 'Connected'";
 
         private RegistryManager registry;
         private string ioTHubHostName;
@@ -49,6 +54,30 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.Services
                 this.registry = RegistryManager.CreateFromConnectionString(conn);
                 this.ioTHubHostName = IotHubConnectionStringBuilder.Create(conn).HostName;
             });
+        }
+
+        public Devices(RegistryManager registry, string ioTHubHostName)
+        {
+            this.registry = registry;
+            this.ioTHubHostName = ioTHubHostName;
+        }
+
+        // Ping the registry to see if the connection is healthy
+        public async Task<StatusResultServiceModel> PingRegistryAsync()
+        {
+            var result = new StatusResultServiceModel(false, "");
+            try
+            {
+                await this.registry.GetDeviceAsync("healthcheck");
+                result.IsHealthy = true;
+                result.Message = "Alive and Well!";
+            }
+            catch (Exception e)
+            {
+                result.Message = e.Message;
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -72,13 +101,22 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.Services
             // normally we need deviceTwins for all devices to show device list
             var devices = await this.registry.GetDevicesAsync(MAX_GET_LIST);
 
-            var twins = await this.GetTwinByQueryAsync(query, continuationToken, MAX_GET_LIST);
+            var twins = await this.GetTwinByQueryAsync(QUERY_PREFIX,
+                                                       query,
+                                                       continuationToken,
+                                                       MAX_GET_LIST);
+            var twinsMap = twins.Result.ToDictionary(twin => twin.DeviceId, twin => twin);
+
+            var devicesList = devices.Where(dvc => twinsMap.ContainsKey(dvc.Id)).ToList();
+            var connectedEdgeDevices = this.GetConnectedEdgeDevices(devicesList, twinsMap).Result;
 
             // since deviceAsync does not support continuationToken for now, we need to ignore those devices which does not shown in twins
-            return new DeviceServiceListModel(devices
-                    .Where(d => twins.Result.Exists(t => d.Id == t.DeviceId))
-                    .Select(azureDevice => new DeviceServiceModel(azureDevice, twins.Result.SingleOrDefault(t => t.DeviceId == azureDevice.Id), this.ioTHubHostName)),
-                twins.ContinuationToken);
+            return new DeviceServiceListModel(devicesList
+                    .Select(azureDevice => new DeviceServiceModel(azureDevice,
+                                                                  twinsMap[azureDevice.Id],
+                                                                  this.ioTHubHostName,
+                                                                  connectedEdgeDevices.ContainsKey(azureDevice.Id))),
+                                              twins.ContinuationToken);
         }
 
         /// <summary>
@@ -104,11 +142,20 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.Services
                 throw new ResourceNotFoundException("The device doesn't exist.");
             }
 
-            return new DeviceServiceModel(device.Result, twin.Result, this.ioTHubHostName);
+            var isEdgeConnectedDevice = await this.DoesDeviceHaveConnectedModules(device.Result.Id);
+
+            return new DeviceServiceModel(device.Result, twin.Result, this.ioTHubHostName, isEdgeConnectedDevice);
         }
 
         public async Task<DeviceServiceModel> CreateAsync(DeviceServiceModel device)
         {
+            if (device.IsEdgeDevice &&
+                device.Authentication != null &&
+                !device.Authentication.AuthenticationType.Equals(AuthenticationType.Sas))
+            {
+                throw new InvalidInputException("Edge devices only support symmetric key authentication.");
+            }
+
             // auto generate DeviceId, if missing
             if (string.IsNullOrEmpty(device.Id))
             {
@@ -179,16 +226,46 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.Services
             await this.registry.RemoveDeviceAsync(id);
         }
 
+        public async Task<TwinServiceModel> GetModuleTwinAsync(string deviceId, string moduleId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                throw new InvalidInputException("A valid deviceId must be provided.");
+            }
+
+            if (string.IsNullOrWhiteSpace(moduleId))
+            {
+                throw new InvalidInputException("A valid moduleId must be provided.");
+            }
+
+            var twin = await this.registry.GetTwinAsync(deviceId, moduleId);
+            return new TwinServiceModel(twin);
+        }
+
+        public async Task<TwinServiceListModel> GetModuleTwinsByQueryAsync(string query,
+                                                                           string continuationToken)
+        {
+            var twins = await this.GetTwinByQueryAsync(MODULE_QUERY_PREFIX,
+                                                       query,
+                                                       continuationToken,
+                                                       MAX_GET_LIST);
+            var result = twins.Result.Select(twin => new TwinServiceModel(twin)).ToList();
+
+            return new TwinServiceListModel(result, twins.ContinuationToken);
+        }
+
         /// <summary>
         /// Get twin result by query
         /// </summary>
+        /// <param name="queryPrefix">The query prefix which selects devices or device modules</param>
         /// <param name="query">The query without prefix</param>
         /// <param name="continuationToken">The continuationToken</param>
-        /// <param name="nubmerOfResult">The max result</param>
+        /// <param name="numberOfResult">The max result</param>
         /// <returns></returns>
-        private async Task<ResultWithContinuationToken<List<Twin>>> GetTwinByQueryAsync(string query, string continuationToken, int nubmerOfResult)
+        private async Task<ResultWithContinuationToken<List<Twin>>> GetTwinByQueryAsync(string queryPrefix,
+            string query, string continuationToken, int numberOfResult)
         {
-            query = string.IsNullOrEmpty(query) ? QUERY_PREFIX : $"{QUERY_PREFIX} where {query}";
+            query = string.IsNullOrEmpty(query) ? queryPrefix : $"{queryPrefix} where {query}";
 
             var twins = new List<Twin>();
 
@@ -197,7 +274,7 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.Services
             QueryOptions options = new QueryOptions();
             options.ContinuationToken = continuationToken;
 
-            while (twinQuery.HasMoreResults && twins.Count < nubmerOfResult)
+            while (twinQuery.HasMoreResults && twins.Count < numberOfResult)
             {
                 var response = await twinQuery.GetNextAsTwinAsync(options);
                 options.ContinuationToken = response.ContinuationToken;
@@ -205,6 +282,61 @@ namespace Microsoft.Azure.IoTSolutions.IotHubManager.Services
             }
 
             return new ResultWithContinuationToken<List<Twin>>(twins, options.ContinuationToken);
+        }
+
+        /// <summary>
+        /// Retrieves the list of edge devices which are reporting as connected based on
+        /// connectivity of their modules. If any of the modules are connected than the edge device
+        /// should report as connected.
+        /// </summary>
+        /// <param name="devicesList">The list of devices to check</param>
+        /// <param name="twinsMap">Map of associated twins for those devices</param>
+        /// <returns>Dictionary of edge device ids and the device</returns>
+        private async Task<Dictionary<string, Device>> GetConnectedEdgeDevices(List<Device> devicesList,
+            Dictionary<string, Twin> twinsMap)
+        {
+            if (!devicesList.Any(dvc => dvc.Capabilities?.IotEdge ??
+                                        twinsMap.Values.Any(twin => twin.Capabilities?.IotEdge ?? false)))
+            {
+                return new Dictionary<string, Device>();
+            }
+
+            var devicesWithConnectedModules = await this.GetDevicesWithConnectedModules();
+            var edgeDevices = devicesList
+                .Where(device => device.Capabilities?.IotEdge ??
+                           twinsMap[device.Id].Capabilities?.IotEdge ?? false)
+                .Where(edgeDvc => devicesWithConnectedModules.Contains(edgeDvc.Id))
+                .ToDictionary(edgeDevice => edgeDevice.Id, edgeDevice => edgeDevice);
+            return edgeDevices;
+        }
+
+        /// <summary>
+        /// Retrieves the set of devices that have at least one module connected.
+        /// </summary>
+        /// <returns>Set of devices which are listed as connected</returns>
+        private async Task<HashSet<string>> GetDevicesWithConnectedModules()
+        {
+            var connectedEdgeDevices = new HashSet<string>();
+
+            var edgeModules = await this.GetModuleTwinsByQueryAsync(DEVICES_CONNECTED_QUERY, "");
+            foreach (var model in edgeModules.Items)
+            {
+                connectedEdgeDevices.Add(model.DeviceId);
+            }
+
+            return connectedEdgeDevices;
+        }
+
+        /// <summary>
+        /// Checks if a single device has connected modules
+        /// </summary>
+        /// <param name="deviceId">Device Id to query</param>
+        /// <returns>True if one of the modules for this device is connected.</returns>
+        private async Task<bool> DoesDeviceHaveConnectedModules(string deviceId)
+        {
+            var query = $"deviceId='{deviceId}' AND {DEVICES_CONNECTED_QUERY}";
+            var edgeModules = await this.GetModuleTwinsByQueryAsync(query, "");
+            return edgeModules.Items.Any();
         }
 
         private class ResultWithContinuationToken<T>
