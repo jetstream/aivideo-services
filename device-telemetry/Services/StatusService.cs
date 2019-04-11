@@ -4,6 +4,7 @@ using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Diagnostics;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Http;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Models;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Runtime;
+using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Storage;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Storage.CosmosDB;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Storage.TimeSeries;
 using Newtonsoft.Json;
@@ -29,19 +30,22 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services
         private readonly IHttpClient httpClient;
         private readonly ILogger log;
         private readonly IServicesConfig servicesConfig;
+        private readonly IBlobStorageHelper blobStorageHelper;
 
         public StatusService(
             ILogger logger,
             IStorageClient storageClient,
             ITimeSeriesClient timeSeriesClient,
             IHttpClient httpClient,
-            IServicesConfig servicesConfig)
+            IServicesConfig servicesConfig,
+            IBlobStorageHelper blobStorageHelper)
         {
             this.log = logger;
             this.storageClient = storageClient;
             this.timeSeriesClient = timeSeriesClient;
             this.httpClient = httpClient;
             this.servicesConfig = servicesConfig;
+            this.blobStorageHelper = blobStorageHelper;
         }
 
         public async Task<StatusServiceModel> GetStatusAsync(bool authRequired)
@@ -55,12 +59,17 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services
             string diagnosticsName = "Diagnostics";
             string authName = "Auth";
             string timeSeriesName = "TimeSeries";
+            string blobStorageName = "BlobStorage";
 
             // Check access to StorageAdapter
             var storageAdapterResult = await this.PingServiceAsync(
                 storageAdapterName,
                 this.servicesConfig.StorageAdapterApiUrl);
             SetServiceStatus(storageAdapterName, storageAdapterResult, result, errors);
+
+            // Check access to the BLOB storage
+            var blobStorageResult = await this.blobStorageHelper.PingAsync();
+            SetServiceStatus(blobStorageName, blobStorageResult, result, errors);
 
             if (authRequired)
             {

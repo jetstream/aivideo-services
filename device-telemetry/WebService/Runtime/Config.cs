@@ -17,6 +17,8 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.WebService.Runtime
 
         // Client authentication and authorization configuration
         IClientAuthConfig ClientAuthConfig { get; }
+
+        IBlobStorageConfig BlobStorageConfig { get; }
     }
 
     /// <summary>Web service configuration</summary>
@@ -46,6 +48,11 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.WebService.Runtime
         private const string MESSAGES_DB_DATABASE_KEY = MESSAGES_DB_KEY + "database";
         private const string MESSAGES_DB_COLLECTION_KEY = MESSAGES_DB_KEY + "collection";
         private const string MESSAGES_STORAGE_TYPE = MESSAGES_DB_KEY + "storage_type";
+
+        private const string TELEMETRY_BLOB_ACCESS_DB_KEY = "TelemetryService:BlobAccess:";
+        private const string TELEMETRY_BLOB_ACCESS_KEY = TELEMETRY_BLOB_ACCESS_DB_KEY + "blob_storage_connection_string";
+        private const string TELEMETRY_BLOB_ACCESS_POLICY_KEY = TELEMETRY_BLOB_ACCESS_DB_KEY + "blob_storage_web_ui_access_policy";
+        private const string TELEMETRY_BLOB_ACCESS_EXPIRY_KEY = TELEMETRY_BLOB_ACCESS_DB_KEY + "blob_storage_web_ui_access_expiry_minutes";
 
         private const string ALARMS_DB_KEY = "TelemetryService:Alarms:";
         private const string ALARMS_DB_DATABASE_KEY = ALARMS_DB_KEY + "database";
@@ -86,6 +93,7 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.WebService.Runtime
         public int Port { get; }
         public IServicesConfig ServicesConfig { get; }
         public IClientAuthConfig ClientAuthConfig { get; }
+        public IBlobStorageConfig BlobStorageConfig { get; }
 
         public Config(IConfigData configData)
         {
@@ -140,6 +148,13 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.WebService.Runtime
                 JwtAudience = configData.GetString(JWT_AUDIENCE_KEY, String.Empty),
                 // By default the allowed clock skew is 2 minutes
                 JwtClockSkew = TimeSpan.FromSeconds(configData.GetInt(JWT_CLOCK_SKEW_KEY, 120)),
+            };
+
+            this.BlobStorageConfig = new BlobStorageConfig
+            {
+                BlobStorageConnectionString = configData.GetString(TELEMETRY_BLOB_ACCESS_KEY),
+                BlobStorageWebUiDirectAccessPolicy = configData.GetString(TELEMETRY_BLOB_ACCESS_POLICY_KEY),
+                BlobStorageWebUiDirectAccessExpiryMinutes = configData.GetInt(TELEMETRY_BLOB_ACCESS_EXPIRY_KEY)
             };
         }
     }

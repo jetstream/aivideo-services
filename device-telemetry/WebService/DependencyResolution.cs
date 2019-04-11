@@ -4,6 +4,7 @@ using System.Reflection;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using Microsoft.Azure.EventHubs.Processor;
+using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Storage;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.ActionsAgent.EventHub;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Diagnostics;
 using Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.External;
@@ -75,6 +76,11 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.WebService
             // Set up storage client for Cosmos DB
             var storageClient = new StorageClient(config.ServicesConfig, logger);
             builder.RegisterInstance(storageClient).As<IStorageClient>().SingleInstance();
+
+            // Set up BLOB storage client
+            ICloudStorageWrapper cloudStorageWrapper = new CloudStoragWrapper();
+            IBlobStorageHelper blobStorageHelper = new BlobStorageHelper(config.BlobStorageConfig, cloudStorageWrapper, logger);
+            builder.RegisterInstance(blobStorageHelper).As<IBlobStorageHelper>().SingleInstance();
 
             // Http
             IHttpClient httpClient = new HttpClient(logger);
