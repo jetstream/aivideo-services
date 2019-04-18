@@ -103,8 +103,8 @@ namespace Services.Test
                 { "data.sample_speed", "10" }
             };
 
-            sampleMessages.Add(new Message("id1", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), data));
-            sampleMessages.Add(new Message("id2", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), data));
+            sampleMessages.Add(new Message("id1", null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), data));
+            sampleMessages.Add(new Message("id2", null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), data));
 
             sampleProperties.Add("data.sample_unit");
             sampleProperties.Add("data.sample_speed");
