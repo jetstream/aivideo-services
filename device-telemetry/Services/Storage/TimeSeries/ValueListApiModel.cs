@@ -53,13 +53,15 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Storage.TimeSeri
                     {
                         // Add message from event
                         var schema = schemas[tsiEvent.SchemaRowId.Value];
-                        
+
                         // Keep track of schemas needed for properties
                         schemaIdsInRange.Add(schema.RowId);
+                        int messageSchemaPropIndex = schema.GetMessageSchemaIndex();
 
                         var message = new Message
                         {
                             DeviceId = tsiEvent.Values[schema.GetDeviceIdIndex()].ToString(),
+                            MessageSchema = messageSchemaPropIndex > 0 ? tsiEvent.Values[messageSchemaPropIndex].ToString() : null,
                             Time = DateTimeOffset.Parse(tsiEvent.Timestamp),
                             Data = this.GetEventAsJson(tsiEvent.Values, schema)
                         };

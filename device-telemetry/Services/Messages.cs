@@ -174,6 +174,7 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services
                 }
                 messages.Add(new Message(
                     doc.GetPropertyValue<string>("device.id"),
+                    null,   // Getting message schema from Cosmos DB not yet implemented
                     doc.GetPropertyValue<long>("device.msg.received"),
                     data));
             }

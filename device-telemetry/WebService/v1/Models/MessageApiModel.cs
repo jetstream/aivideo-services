@@ -15,6 +15,9 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.WebService.v1.Models
         [JsonProperty(PropertyName = "DeviceId")]
         public string DeviceId { get; set; }
 
+        [JsonProperty(PropertyName = "MessageSchema")]
+        public string MessageSchema { get; set; }
+
         [JsonProperty(PropertyName = "Time")]
         public string Time => this.time.ToString(DATE_FORMAT);
 
@@ -23,10 +26,12 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.WebService.v1.Models
 
         public MessageApiModel(
             string deviceId,
+            string messageSchema,
             DateTimeOffset time,
             JObject data)
         {
             this.DeviceId = deviceId;
+            this.MessageSchema = messageSchema;
             this.time = time;
             this.Data = data;
         }
@@ -36,6 +41,7 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.WebService.v1.Models
             if (message != null)
             {
                 this.DeviceId = message.DeviceId;
+                this.MessageSchema = message.MessageSchema;
                 this.time = message.Time;
                 this.Data = message.Data;
             }

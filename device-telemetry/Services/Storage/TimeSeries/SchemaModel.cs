@@ -12,6 +12,7 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Storage.TimeSeri
     public class SchemaModel
     {
         private const string DEVICE_ID_KEY = "iothub-connection-device-id";
+        private const string MESSAGE_SCHEMA_KEY = "iothub-message-schema";
         private readonly HashSet<string> excludeProperties;
 
         public SchemaModel()
@@ -78,6 +79,19 @@ namespace Microsoft.Azure.IoTSolutions.DeviceTelemetry.Services.Storage.TimeSeri
 
             throw new TimeSeriesParseException("No device id found in message schema from Time Series Insights. " +
                                             $"Device id property '{DEVICE_ID_KEY}' is missing.");
+        }
+
+        public int GetMessageSchemaIndex()
+        {
+            for (int i = 0; i < this.Properties.Count; i++)
+            {
+                if (this.Properties[i].Name.Equals(MESSAGE_SCHEMA_KEY, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
     }
 }
