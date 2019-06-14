@@ -5,9 +5,9 @@
 set -e
 
 # Note: use lowercase names for the Docker images
-DOCKER_IMAGE="azureiotpcs/telemetry-dotnet"
+DOCKER_IMAGE="azureaivideo/telemetry-dotnet"
 # "testing" is the latest dev build, usually matching the code in the "master" branch
-DOCKER_TAG="$DOCKER_IMAGE:testing"
+DOCKER_TAG="$DOCKER_IMAGE:3.0.0"
 
 # Debug|Release
 CONFIGURATION=Release
